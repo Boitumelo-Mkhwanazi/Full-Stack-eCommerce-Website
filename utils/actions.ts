@@ -1,4 +1,5 @@
 "use server";
+import { revalidatePath } from "next/cache";
 
 import db from "@/utils/db";
 import { auth, currentUser } from "@clerk/nextjs/server";
@@ -11,6 +12,12 @@ const getAuthUser = async () => {
   if (!user) {
     throw new Error("You must be logged in to access this route");
   }
+  return user;
+};
+
+const getAdminUser = async () => {
+  const user = await getAuthUser();
+  if (user.id !== process.env.ADMIN_USER_ID) redirect("/");
   return user;
 };
 
@@ -80,4 +87,32 @@ export const createProductAction = async (
     return renderError(error);
   }
   redirect("/admin/products");
+};
+
+export const fetchAdminProducts = async () => {
+  await getAdminUser();
+  const products = await db.product.findMany({
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+  return products;
+};
+
+export const deleteProductAction = async (prevState: { productId: string }) => {
+  const { productId } = prevState;
+  await getAdminUser();
+
+  try {
+    await db.product.delete({
+      where: {
+        id: productId,
+      },
+    });
+
+    revalidatePath("/admin/products");
+    return { message: "product removed" };
+  } catch (error) {
+    return renderError(error);
+  }
 };
